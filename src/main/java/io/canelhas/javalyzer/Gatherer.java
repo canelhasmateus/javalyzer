@@ -10,7 +10,7 @@ import static java.util.Collections.unmodifiableMap;
 
 public interface Gatherer< T extends Enum< T > > {
     @SafeVarargs
-    static < T extends Enum< T > > UnaryOperator< GatheredInfo< T > > resolveWith( Gatherer< T >... gatherers ) {
+    static < T extends Enum< T > > UnaryOperator< GatheredInfo< T > > enrichWith( Gatherer< T >... gatherers ) {
         return currentInfo -> {
             for ( Gatherer< T > gatherer : gatherers ) {
                 GatheredInfo< T > newInfo = gatherer.resolve( currentInfo );

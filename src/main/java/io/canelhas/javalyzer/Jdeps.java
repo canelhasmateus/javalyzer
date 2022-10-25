@@ -1,12 +1,9 @@
 package io.canelhas.javalyzer;
 
-import io.canelhas.javalyzer.JarSummary.InfoKinds;
-import io.canelhas.javalyzer.JarSummary.JarInfo;
-import io.canelhas.javalyzer.JarSummary.UsageStatistics;
-import io.canelhas.javalyzer.ParseInfo.Full;
-import io.canelhas.javalyzer.ParseInfo.NotFound;
-import io.canelhas.javalyzer.ParseInfo.PackageOnly;
-import io.canelhas.javalyzer.ParseInfo.Unknown;
+import io.canelhas.javalyzer.Dependencies.JarInfo;
+import io.canelhas.javalyzer.Dependencies.JarInfo.InfoKinds;
+import io.canelhas.javalyzer.ToolRunner.ParseInfo;
+import io.canelhas.javalyzer.ToolRunner.ParseInfo.*;
 import io.canelhas.javalyzer.ToolRunner.ShellOutput;
 
 import java.io.PrintWriter;
@@ -18,8 +15,13 @@ import java.util.spi.ToolProvider;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import static io.canelhas.javalyzer.Gatherer.resolveWith;
+import static io.canelhas.javalyzer.Dependencies.JarInfo.InfoKinds.withLocationInfo;
+import static io.canelhas.javalyzer.Dependencies.JarInfo.createJarInfo;
+import static io.canelhas.javalyzer.Dependencies.JarInfo.fullPath;
+import static io.canelhas.javalyzer.Dependencies.increaseCount;
+import static io.canelhas.javalyzer.Gatherer.enrichWith;
 import static io.canelhas.javalyzer.utils.FunctionalUtils.lookupWith;
+import static java.util.stream.Collectors.toList;
 
 public class Jdeps {
 
@@ -29,41 +31,36 @@ public class Jdeps {
     private final Map< String, JarInfo > lookup;
 
     public Jdeps( ToolRunner jdeps, Collection< JarInfo > jars ) {
+
+        this.classPath = jars;
+        this.jdeps = jdeps;
+        this.lookup = lookupWith( jars, fullPath() );
+
+        // TODO: 24/10/2022 parametrize?
         List< String > args = new ArrayList<>();
-        // TODO: 24/10/2022 possibly parametrizable
         args.add( "-verbose" );
+
         args.add( "--multi-release" );
         args.add( "base" );
 
-
-        String classPath = jars.stream()
-                               .map( JarInfo::fullPath )
-                               .distinct()
-                               .collect( Collectors.joining( ";" ) );
-
         args.add( "--class-path" );
-        args.add( classPath );
+        args.add( jars.stream()
+                      .map( fullPath() )
+                      .distinct()
+                      .collect( Collectors.joining( ";" ) ) );
 
-        // Last parameter is the jar we want to analyze - We'll substitute this later.
-        args.add( "" );
-
-        this.lookup = lookupWith( jars, JarInfo::fileName );
         this.args = args.toArray( new String[ 0 ] );
-        this.classPath = jars;
-        this.jdeps = jdeps;
-    }
 
-    public static Jdeps of( Collection< Path > paths, Gatherer< InfoKinds >... gatherer ) {
-        return of( paths.stream(), gatherer );
+
     }
 
     public static Jdeps of( Stream< Path > paths, Gatherer< InfoKinds >... gatherers ) {
 
         var classPath = paths.distinct()
-                             .map( InfoKinds::withLocationInfo )
-                             .map( resolveWith( gatherers ) )
-                             .map( JarInfo::create )
-                             .collect( Collectors.toList() );
+                             .map( withLocationInfo() )
+                             .map( enrichWith( gatherers ) )
+                             .map( createJarInfo() )
+                             .collect( toList() );
 
         ToolRunner runner = ( arg ) -> {
 
@@ -85,31 +82,11 @@ public class Jdeps {
     }
 
 
-    private JarSummary buildContext( JarInfo jar ) {
-
-        ShellOutput shellOutput;
-        {
-            String[] copiedArgs = new String[ args.length ];
-            System.arraycopy( args, 0, copiedArgs, 0, args.length );
-            copiedArgs[ copiedArgs.length - 1 ] = jar.getLocation().toAbsolutePath().toString();
-            shellOutput = jdeps.run( copiedArgs );
-        }
-
-        UsageStatistics usageStatistics = gatherStatistics( shellOutput );
-        // todo analyze gradle / maven dependencies and produce direct dependencies
-        return JarSummary.builder()
-                         .usageStatistics( usageStatistics )
-                         .dependencies( null )
-                         .jar( jar )
-                         .build();
-
-    }
-
     private ParseInfo parseLine( String line ) {
 
         var split = line.split( "->" );
         if ( split.length == 1 ) {
-            return new ParseInfo.ToolWarning( split[ 0 ] );
+            return new ToolWarning( split[ 0 ] );
         }
 
         // Format is: "currentClass -> [ dependsOnClass ] dependsOnPackage"
@@ -146,109 +123,51 @@ public class Jdeps {
         }
 
         return switch ( destinationClass ) {
-            case null, "" -> {
-                yield new PackageOnly( originClass, destinationPackage, jarInfo );
-            }
-            default -> {
-                yield new Full( originClass, destinationPackage, destinationClass, jarInfo );
-            }
+            case null, "" -> new PackageOnly( originClass, destinationPackage, jarInfo );
+            default -> new Full( originClass, destinationPackage, destinationClass, jarInfo );
         };
 
 
     }
 
-    private UsageStatistics gatherStatistics( ShellOutput output ) {
 
-        HashMap< JarInfo, Integer > frequencies = new HashMap<>();
+    public Stream< Dependencies > run( Predicate< JarInfo > filter ) {
+        return this.classPath.stream().filter( filter ).map( jar -> {
 
-        output.stdout()
-              .map( this::parseLine )
-              .forEach( info -> {
-                  switch ( info ) {
-                      case NotFound n -> {
-                          Integer count = frequencies.getOrDefault( null, 0 );
-                          frequencies.put( null, count + 1 );
-                      }
-                      case PackageOnly p -> {
-                          Integer count = frequencies.getOrDefault( p.foundLookup, 0 );
-                          frequencies.put( p.foundLookup, count + 1 );
-                      }
-                      case Full f -> {
-                          Integer count = frequencies.getOrDefault( f.foundLookup, 0 );
-                          frequencies.put( f.foundLookup, count + 1 );
-                      }
-                      default -> {}
-                  }
-              } );
+            ShellOutput shellOutput;
+            {
+                String[] copiedArgs = new String[ args.length + 1 ];
+                System.arraycopy( args, 0, copiedArgs, 0, args.length );
+                copiedArgs[ copiedArgs.length - 1 ] = fullPath().apply( jar );
 
-        return UsageStatistics.builder()
-                              .frequency( frequencies )
-                              .build();
-    }
+                shellOutput = jdeps.run( copiedArgs );
+            }
 
-    public Stream< JarSummary > run( Predicate< JarInfo > filter ) {
-        return this.classPath.stream()
-                             .filter( filter )
-                             .map( this::buildContext );
+            var frequencies = new HashMap< JarInfo, Integer >();
+            var increase    = increaseCount( frequencies );
+            shellOutput.stdout().map( this::parseLine ).forEach( info -> {
+
+                switch ( info ) {
+                    case ToolWarning __ -> {}
+                    case Unknown __ -> increase.accept( null );
+                    case NotFound __ -> increase.accept( null );
+                    case PackageOnly p -> increase.accept( p.foundLookup );
+                    case Full f -> increase.accept( f.foundLookup );
+                }
+
+            } );
+
+            return Dependencies.builder()
+                               .usageCount( frequencies )
+                               // todo produce dependencies from jar pom. the current implementation wont ever show unused dependencies.
+                               .dependencies( frequencies.keySet() )
+                               .jar( jar )
+                               .build();
+
+        } );
     }
 
 
 }
 
 
-sealed class ParseInfo {
-
-    final static class ToolWarning extends ParseInfo {
-        public final String message;
-
-        ToolWarning( String message ) {this.message = message;}
-    }
-
-    final static class Unknown extends ParseInfo {
-        public final String message;
-        public final String origin;
-
-        Unknown( String origin, String message ) {
-            this.origin = origin;
-            this.message = message;
-        }
-    }
-
-    final static class NotFound extends ParseInfo {
-        public final String message;
-        public final String origin;
-
-        NotFound( String origin, String message ) {
-            this.origin = origin;
-            this.message = message;
-        }
-    }
-
-    final static class PackageOnly extends ParseInfo {
-
-        public final String  originClass;
-        public final String  packageName;
-        public final JarInfo foundLookup;
-
-        PackageOnly( String originClass, String packageName, JarInfo foundLookup ) {
-            this.originClass = originClass;
-            this.packageName = packageName;
-            this.foundLookup = foundLookup;
-        }
-    }
-
-    final static class Full extends ParseInfo {
-        public final String  originClass;
-        public final String  className;
-        public final String  packageName;
-        public final JarInfo foundLookup;
-
-        Full( String originClass, String packageName, String className, JarInfo foundLookup ) {
-            this.originClass = originClass;
-            this.className = className;
-            this.packageName = packageName;
-            this.foundLookup = foundLookup;
-        }
-    }
-
-}

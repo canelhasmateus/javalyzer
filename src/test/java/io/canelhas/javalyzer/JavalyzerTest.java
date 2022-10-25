@@ -1,7 +1,6 @@
 package io.canelhas.javalyzer;
 
-import io.canelhas.javalyzer.JarSummary.JarInfo;
-import io.canelhas.javalyzer.JarSummary.UsageStatistics;
+import io.canelhas.javalyzer.Dependencies.JarInfo;
 import org.junit.jupiter.api.Test;
 import test.JavalyzerTestData;
 
@@ -21,9 +20,9 @@ public class JavalyzerTest implements JavalyzerTestData {
 
         ToolRunner runner = args -> withStdout( "just some warnings" );
 
-        Optional< JarSummary > first = new Jdeps( runner, someClassPath() )
-                                               .run( FOR_ALL )
-                                               .findFirst();
+        Optional< Dependencies > first = new Jdeps( runner, someClassPath() )
+                                                 .run( FOR_ALL )
+                                                 .findFirst();
 
         assertThat( stats( first ) ).hasValueSatisfying( m -> {
             assertThat( m ).isEmpty();
@@ -36,9 +35,9 @@ public class JavalyzerTest implements JavalyzerTestData {
 
         ToolRunner jdeps = args -> withStdout( "class -> not found" );
 
-        Optional< JarSummary > first = new Jdeps( jdeps, someClassPath() )
-                                               .run( a -> true )
-                                               .findFirst();
+        Optional< Dependencies > first = new Jdeps( jdeps, someClassPath() )
+                                                 .run( FOR_ALL )
+                                                 .findFirst();
 
         assertThat( stats( first ) ).hasValueSatisfying( m -> {
             assertThat( m.get( null ) ).isEqualTo( 1 );
@@ -52,9 +51,9 @@ public class JavalyzerTest implements JavalyzerTestData {
         ToolRunner jdeps = args -> {
             String s = """
                        Warning: split package: netscape.javascript jrt:/jdk.jsobject
-                       Warning: split package: org.w3c.dom jrt:/java.xml 
-                       Warning: split package: org.w3c.dom.events jrt:/java.xml 
-                       activiti-engine-5.17.0.jar -> jackson-core.jar
+                       Warning: split package: org.w3c.dom jrt:/java.xml
+                       Warning: split package: org.w3c.dom.events jrt:/java.xml
+                       activiti-engine-5.17.0.jar -> C:\\jackson-core.jar
                        activiti-engine-5.17.0.jar -> java.base
                        activiti-engine-5.17.0.jar -> not found
                        """;
@@ -62,10 +61,10 @@ public class JavalyzerTest implements JavalyzerTestData {
             return withStdout( s.lines() );
         };
 
-        JarInfo jacksonCore = someJarInfo( "jackson-core.jar" );
-        Optional< JarSummary > first = new Jdeps( jdeps, List.of( jacksonCore ) )
-                                               .run( a -> true )
-                                               .findFirst();
+        var jacksonCore = someJarInfo( "jackson-core.jar" );
+        var first = new Jdeps( jdeps, List.of( jacksonCore ) )
+                            .run( FOR_ALL )
+                            .findFirst();
 
         assertThat( stats( first ) ).hasValueSatisfying( m -> {
             assertThat( m.get( jacksonCore ) ).isEqualTo( 1 );
@@ -73,10 +72,8 @@ public class JavalyzerTest implements JavalyzerTestData {
         } );
     }
 
-    private static Optional< Map< JarInfo, Integer > > stats( Optional< JarSummary > first ) {
-
-        return first.map( JarSummary::getUsageStatistics )
-                    .map( UsageStatistics::getFrequency );
+    private static Optional< Map< JarInfo, Integer > > stats( Optional< Dependencies > first ) {
+        return first.map( Dependencies::getUsageCount );
     }
 
 

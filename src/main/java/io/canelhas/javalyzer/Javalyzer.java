@@ -1,7 +1,7 @@
 package io.canelhas.javalyzer;
 
-import io.canelhas.javalyzer.JarSummary.InfoKinds;
-import io.canelhas.javalyzer.JarSummary.JarInfo;
+import io.canelhas.javalyzer.Dependencies.JarInfo;
+import io.canelhas.javalyzer.Dependencies.JarInfo.InfoKinds;
 import lombok.RequiredArgsConstructor;
 
 import java.nio.file.Path;
@@ -13,13 +13,14 @@ import static io.canelhas.javalyzer.utils.FileUtils.walk;
 
 @RequiredArgsConstructor
 public class Javalyzer {
+
     private final Set< Path > paths;
 
-    public Stream< JarSummary > run( Predicate< JarInfo > chooser ) {
+    public Stream< Dependencies > run( Predicate< JarInfo > chooser ) {
         return run( chooser, new JarGatherer() );
     }
 
-    public Stream< JarSummary > run( Predicate< JarInfo > chooser, Gatherer< InfoKinds >... gatherer ) {
+    public Stream< Dependencies > run( Predicate< JarInfo > chooser, Gatherer< InfoKinds >... gatherer ) {
 
         Stream< Path > pathStream = walk( paths ).filter( f -> {
             return f.toFile()

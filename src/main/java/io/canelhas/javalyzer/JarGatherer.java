@@ -1,7 +1,7 @@
 package io.canelhas.javalyzer;
 
 import io.canelhas.javalyzer.Gatherer.GatheredInfo.Confidence;
-import io.canelhas.javalyzer.JarSummary.InfoKinds;
+import io.canelhas.javalyzer.Dependencies.JarInfo.InfoKinds;
 import io.canelhas.javalyzer.mvn.pom.Model;
 import io.canelhas.javalyzer.utils.StringUtils;
 import org.apache.maven.shared.jar.JarAnalyzer;
@@ -15,7 +15,7 @@ import java.util.jar.Manifest;
 import java.util.stream.Collectors;
 
 import static io.canelhas.javalyzer.Gatherer.GatheredInfo.Confidence.LOW;
-import static io.canelhas.javalyzer.JarSummary.InfoKinds.*;
+import static io.canelhas.javalyzer.Dependencies.JarInfo.InfoKinds.*;
 
 final class JarGatherer implements Gatherer< InfoKinds > {
     private static File fileLocation( GatheredInfo< InfoKinds > info ) {
@@ -23,7 +23,7 @@ final class JarGatherer implements Gatherer< InfoKinds > {
     }
 
     private static Path pathLocation( GatheredInfo< InfoKinds > info ) {
-        Confidence< Object > confidence = info.get( InfoKinds.LOCATION );
+        Confidence< Object > confidence = info.get( Dependencies.JarInfo.InfoKinds.LOCATION );
         return ( Path ) confidence.value();
     }
 

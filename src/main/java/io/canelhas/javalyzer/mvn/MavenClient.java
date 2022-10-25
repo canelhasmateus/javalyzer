@@ -1,6 +1,6 @@
 package io.canelhas.javalyzer.mvn;
 
-import io.canelhas.javalyzer.JarSummary;
+import io.canelhas.javalyzer.Dependencies;
 import io.canelhas.javalyzer.utils.FileUtils;
 import io.canelhas.javalyzer.utils.StringUtils;
 import lombok.RequiredArgsConstructor;
@@ -39,7 +39,7 @@ public class MavenClient {
         return new MavenClient( mvnPath, cache );
     }
 
-    public Optional< Doc > search( JarSummary.JarInfo jar ) {
+    public Optional< Doc > search( Dependencies.JarInfo jar ) {
 //
 //        String[] keys = { jar.getSha() };
 //        for ( String key : keys ) {
