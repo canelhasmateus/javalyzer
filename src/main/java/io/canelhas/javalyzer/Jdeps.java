@@ -6,6 +6,7 @@ import io.canelhas.javalyzer.JarSummary.UsageStatistics;
 import io.canelhas.javalyzer.ParseInfo.Full;
 import io.canelhas.javalyzer.ParseInfo.NotFound;
 import io.canelhas.javalyzer.ParseInfo.PackageOnly;
+import io.canelhas.javalyzer.ParseInfo.Unknown;
 import io.canelhas.javalyzer.ToolRunner.ShellOutput;
 
 import java.io.PrintWriter;
@@ -115,31 +116,42 @@ public class Jdeps {
         // The package is always at the last position.
         var originClass    = split[ 0 ].trim();
         var dependencyInfo = split[ 1 ].trim().split( "\\s+" );
+        int infoLength     = dependencyInfo.length;
 
-        var lastEntry = dependencyInfo[ dependencyInfo.length - 1 ];
-        if ( lastEntry.endsWith( "not found" ) ) {
-            return new NotFound( originClass, lastEntry );
-        }
-
-        String  destinationClass;
-        String  destinationPackage;
-        JarInfo jarInfo;
-        return switch ( dependencyInfo.length ) {
-
+        String destinationPackage;
+        String destinationClass;
+        switch ( infoLength ) {
             case 1 -> {
                 destinationPackage = dependencyInfo[ 0 ];
-                jarInfo = lookup.get( destinationPackage );
-                yield new PackageOnly( originClass, destinationPackage, jarInfo );
+                destinationClass = "";
             }
-
             case 2 -> {
                 destinationClass = dependencyInfo[ 0 ];
-                    destinationPackage = dependencyInfo[ 1 ];
-                jarInfo = lookup.get( destinationPackage );
-                yield new Full( originClass, originClass, destinationClass, jarInfo );
+                destinationPackage = dependencyInfo[ 1 ];
+            }
+            default -> throw new IllegalStateException( "Unexpected value: " + Arrays.toString( split ) );
+        }
+
+        JarInfo jarInfo;
+        {
+
+            if ( destinationPackage.endsWith( "not found" ) ) {
+                return new Unknown( originClass, destinationPackage );
             }
 
-            default -> throw new IllegalStateException( "Unexpected value: " + Arrays.toString( split ) );
+            jarInfo = lookup.get( destinationPackage );
+            if ( jarInfo == null ) {
+                return new NotFound( originClass, destinationPackage );
+            }
+        }
+
+        return switch ( destinationClass ) {
+            case null, "" -> {
+                yield new PackageOnly( originClass, destinationPackage, jarInfo );
+            }
+            default -> {
+                yield new Full( originClass, destinationPackage, destinationClass, jarInfo );
+            }
         };
 
 
@@ -192,6 +204,16 @@ sealed class ParseInfo {
         ToolWarning( String message ) {this.message = message;}
     }
 
+    final static class Unknown extends ParseInfo {
+        public final String message;
+        public final String origin;
+
+        Unknown( String origin, String message ) {
+            this.origin = origin;
+            this.message = message;
+        }
+    }
+
     final static class NotFound extends ParseInfo {
         public final String message;
         public final String origin;
@@ -221,7 +243,7 @@ sealed class ParseInfo {
         public final String  packageName;
         public final JarInfo foundLookup;
 
-        Full( String originClass, String className, String packageName, JarInfo foundLookup ) {
+        Full( String originClass, String packageName, String className, JarInfo foundLookup ) {
             this.originClass = originClass;
             this.className = className;
             this.packageName = packageName;
