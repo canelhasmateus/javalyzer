@@ -4,12 +4,13 @@ import java.util.Collections;
 import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.Map;
-import java.util.function.Function;
+import java.util.function.UnaryOperator;
 
 import static java.util.Collections.unmodifiableMap;
 
 public interface Gatherer< T extends Enum< T > > {
-    public static < T extends Enum< T > > Function< GatheredInfo< T >, GatheredInfo< T > > resolveWith( Gatherer< T >... gatherers ) {
+    @SafeVarargs
+    static < T extends Enum< T > > UnaryOperator< GatheredInfo< T > > resolveWith( Gatherer< T >... gatherers ) {
         return currentInfo -> {
             for ( Gatherer< T > gatherer : gatherers ) {
                 GatheredInfo< T > newInfo = gatherer.resolve( currentInfo );
@@ -24,15 +25,15 @@ public interface Gatherer< T extends Enum< T > > {
     class GatheredInfo< T extends Enum< T > > {
 
         private final Class< T >                     kind;
-        private final Map< T, Confidence< Object > > attributes;
+        private final Map< T, Confidence< Object > > confidences;
 
         public GatheredInfo( Class< T > kind ) {
-            attributes = Collections.emptyMap();
+            confidences = Collections.emptyMap();
             this.kind = kind;
         }
 
-        private GatheredInfo( Class< T > kind, Map< T, Confidence< Object > > confidenceMap ) {
-            attributes = unmodifiableMap( confidenceMap );
+        private GatheredInfo( Class< T > kind, Map< T, Confidence< Object > > confidences ) {
+            this.confidences = unmodifiableMap( confidences );
             this.kind = kind;
         }
 
@@ -65,13 +66,13 @@ public interface Gatherer< T extends Enum< T > > {
                 return this;
             }
 
-            Map< T, Confidence< Object > > result = new EnumMap<>( this.attributes );
+            Map< T, Confidence< Object > > result = new EnumMap<>( this.confidences );
             result.put( key, info );
             return new GatheredInfo<>( this.kind, result );
         }
 
         public Confidence< Object > get( T key ) {
-            Confidence< Object > confidence = attributes.get( key );
+            Confidence< Object > confidence = confidences.get( key );
             return confidence != null ? confidence
                                       : Confidence.none();
         }
