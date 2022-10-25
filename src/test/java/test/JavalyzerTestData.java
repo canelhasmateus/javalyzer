@@ -1,6 +1,6 @@
 package test;
 
-import io.canelhas.javalyzer.Dependencies.JarInfo;
+import io.canelhas.javalyzer.DependenciesView.JarInfo;
 import io.canelhas.javalyzer.ToolRunner.ShellOutput;
 
 import java.nio.file.Path;

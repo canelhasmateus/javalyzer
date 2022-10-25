@@ -1,32 +1,28 @@
 package io.canelhas.javalyzer.utils;
 
-
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Function;
 
-
 public class FunctionalUtils {
 
+    public static <K, U> Map<K, U> lookupWith(Collection<U> c, Function<U, K> keyFn) {
 
-    public static < K, U > Map< K, U > lookupWith( Collection< U > c, Function< U, K > keyFn ) {
-
-        return lookupWith( c, keyFn, Function.identity() );
+        return lookupWith(c, keyFn, Function.identity());
     }
 
-    private static < K, U, V > Map< K, V > lookupWith( Collection< U > c, Function< U, K > keyFn, Function< U, V > valueFn ) {
+    private static <K, U, V> Map<K, V> lookupWith(Collection<U> c, Function<U, K> keyFn, Function<U, V> valueFn) {
 
-        Map< K, V > res = new HashMap<>();
+        final Map<K, V> res = new HashMap<>();
 
-        for ( U u : c ) {
+        for (final U u : c) {
 
-            K key   = keyFn.apply( u );
-            V value = valueFn.apply( u );
+            final K key = keyFn.apply(u);
+            final V value = valueFn.apply(u);
 
-            res.put( key, value );
+            res.put(key, value);
         }
-
 
         return res;
     }

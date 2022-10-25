@@ -1,156 +1,145 @@
 package io.canelhas.javalyzer;
 
-import io.canelhas.javalyzer.Gatherer.GatheredInfo.Confidence;
-import io.canelhas.javalyzer.Dependencies.JarInfo.InfoKinds;
-import io.canelhas.javalyzer.mvn.pom.Model;
-import io.canelhas.javalyzer.utils.StringUtils;
+import io.canelhas.javalyzer.DependenciesView.JarInfo.InfoKinds;
+import org.apache.maven.model.Model;
+import org.apache.maven.model.io.xpp3.MavenXpp3Reader;
 import org.apache.maven.shared.jar.JarAnalyzer;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Optional;
 import java.util.jar.JarEntry;
 import java.util.jar.Manifest;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-import static io.canelhas.javalyzer.Gatherer.GatheredInfo.Confidence.LOW;
-import static io.canelhas.javalyzer.Dependencies.JarInfo.InfoKinds.*;
+import static io.canelhas.javalyzer.DependenciesView.JarInfo.InfoKinds.ARTIFACT;
+import static io.canelhas.javalyzer.DependenciesView.JarInfo.InfoKinds.GROUP;
+import static io.canelhas.javalyzer.DependenciesView.JarInfo.InfoKinds.MANIFEST;
+import static io.canelhas.javalyzer.DependenciesView.JarInfo.InfoKinds.POM;
+import static io.canelhas.javalyzer.DependenciesView.JarInfo.InfoKinds.VERSION;
+import static io.canelhas.javalyzer.Gatherer.GatheredInfo.Confidence.someConfidence;
+import static java.util.Optional.empty;
+import static java.util.Optional.ofNullable;
 
-final class JarGatherer implements Gatherer< InfoKinds > {
-    private static File fileLocation( GatheredInfo< InfoKinds > info ) {
-        return pathLocation( info ).toFile();
+final class JarGatherer implements Gatherer<InfoKinds> {
+
+    private static File fileLocation(GatheredInfo<InfoKinds> info) {
+        return pathLocation(info).toFile();
     }
 
-    private static Path pathLocation( GatheredInfo< InfoKinds > info ) {
-        Confidence< Object > confidence = info.get( Dependencies.JarInfo.InfoKinds.LOCATION );
-        return ( Path ) confidence.value();
+    private static Path pathLocation(GatheredInfo<InfoKinds> info) {
+        final var confidence = info.get(DependenciesView.JarInfo.InfoKinds.LOCATION);
+        return (Path) confidence.value();
     }
 
-    public static List< Model > pomEntries( JarAnalyzer jarAnalyzer ) {
-        List< JarEntry > entries = jarAnalyzer.getMavenPomEntries();
-        return entries.stream().map( m -> {
+    public static List<Model> pomFrom(JarAnalyzer jarAnalyzer) {
+        final List<JarEntry> entries = jarAnalyzer.getMavenPomEntries();
+        return entries.stream().map(m -> {
             try {
-                byte[] bytes = jarAnalyzer.getEntryInputStream( m ).readAllBytes();
-                return StringUtils.fromXml( bytes, Model.class );
+                final var bytes = jarAnalyzer.getEntryInputStream(m).readAllBytes();
+                return new MavenXpp3Reader().read(new ByteArrayInputStream(bytes));
+            } catch (Exception e) {
+                throw new RuntimeException(e);
             }
-            catch ( IOException e ) {
-                throw new RuntimeException( e );
-            }
-        } ).collect( Collectors.toList() );
+        }).collect(Collectors.toList());
     }
 
-    @Override public GatheredInfo< InfoKinds > resolve( GatheredInfo< InfoKinds > info ) {
-        JarAnalyzer jarAnalyzer;
+    @Override
+    public GatheredInfo<InfoKinds> resolve(GatheredInfo<InfoKinds> info) {
+        final JarAnalyzer jarAnalyzer;
         try {
-            jarAnalyzer = new JarAnalyzer( fileLocation( info ) );
-        }
-        catch ( IOException e ) {
+            jarAnalyzer = new JarAnalyzer(fileLocation(info));
+        } catch (IOException e) {
             return info;
         }
 
-        Manifest      manifest        = jarAnalyzer.getJarData().getManifest();
-        List< Model > mavenPomEntries = pomEntries( jarAnalyzer );
+        final var manifest = manifestFrom(jarAnalyzer);
+        final var pomEntries = pomFrom(jarAnalyzer);
 
-        return info.with( MANIFEST, new Confidence<>( LOW, manifest ) )
-                   .with( POM, new Confidence<>( LOW, mavenPomEntries ) )
-                   // TODO: 24/10/2022
-                   .with( GROUP, Confidence.none() )
-                   .with( ARTIFACT, Confidence.none() )
-                   .with( VERSION, Confidence.none() )
-                ;
+        final var artifact = artifactIdFrom(jarAnalyzer, pomEntries, manifest);
+        final var version = versionFrom(jarAnalyzer, pomEntries, manifest);
+        final var groupId = groupIdFrom(jarAnalyzer, pomEntries, manifest);
+
+        return info
+            .with(MANIFEST, someConfidence(manifest))
+            .with(POM, someConfidence(pomEntries))
+            // TODO: 24/10/2022
+            .with(GROUP, someConfidence(groupId))
+            .with(ARTIFACT, someConfidence(artifact))
+            .with(VERSION, someConfidence(version));
     }
 
-    public String version( ) {
-
-        {
-//            for ( Model pomEntry : relatedPoms ) {
-//                return pomEntry.getVersion();
-//            }
-        }
-
-        {
-//            Manifest manifest1 = manifest.orElse( null );
-//            if ( manifest1 != null ) {
-//                Attributes mainAttributes = manifest1.getMainAttributes();
-//                String     name           = mainAttributes.getValue( "Bundle-Version" );
-//                if ( name != null ) {
-//                    return name;
-//                }
-//            }
-
-        }
-        {
-//
-//            String  input   = this.location.getFileName().toString();
-//            Matcher matcher = Pattern.compile( "\\d+\\.\\d+([.b]\\d+)?" ).matcher( input );
-//            if ( matcher.find() ) {
-//                return matcher.group( 0 );
-//
-//            }
-
-
-        }
-
-
-        return null;
+    private Manifest manifestFrom(JarAnalyzer jarAnalyzer) {
+        return jarAnalyzer.getJarData().getManifest();
     }
 
-    public String artifactId( ) {
+    private Optional<String> versionFrom(JarAnalyzer jarAnalyzer, List<Model> mavenPomEntries, Manifest manifest) {
 
-        {
-//            for ( Model pomEntry : relatedPoms ) {
-//                return pomEntry.getArtifactId();
-//            }
+        for (final var pomEntry : mavenPomEntries) {
+            return ofNullable(pomEntry.getVersion());
         }
 
-        {
-//
-//            if ( manifest != null ) {
-//
-//                Attributes mainAttributes = manifest.getMainAttributes();
-//                String     name           = mainAttributes.getValue( "Bundle-Name" );
-//                if ( name != null ) {
-//                    return name;
-//                }
-//            }
-
+        if ( manifest != null ){
+            final var mainAttributes = manifest.getMainAttributes();
+            final var name = mainAttributes.getValue("Bundle-Version");
+            if (name != null) {
+                return ofNullable(name);
+            }
+        }
+        else {
+            System.out.println( jarAnalyzer.getFile().toString() );
         }
 
-        {
-//
-//            String  input   = this.location.getFileName().toString();
-//            Matcher matcher = Pattern.compile( "([a-zA-Z-]+)(-\\S+?.jar)" ).matcher( input );
-//            if ( matcher.matches() ) {
-//                return matcher.group( 1 );
-//            }
+        final var input = jarAnalyzer.getFile().toString();
+        final var matcher = Pattern.compile("\\d+\\.\\d+([.b]\\d+)?").matcher(input);
+        if (matcher.find()) {
+            return ofNullable(matcher.group(0));
 
         }
 
-//        String input = this.location.getFileName().toString();
-//        return input.split( ".jar" )[ 0 ];
-
-        return null;
+        return empty();
     }
 
-    public String groupId( ) {
+    private Optional<String> groupIdFrom(JarAnalyzer jarAnalyzer, List<Model> mavenPomEntries, Manifest manifest) {
 
-//        for ( Model pomEntry : relatedPoms ) {
-//            return pomEntry.getGroupId();
-//        }
+        for (var pomEntry : mavenPomEntries) {
+            return ofNullable(pomEntry.getGroupId());
+        }
 
-        {
-
-//            if ( manifest != null ) {
-//
-//                String value = manifest.getMainAttributes().getValue( "Bundle-SymbolicName" );
-//                return value;
-//
-//            }
+        if (manifest != null) {
+            var value = manifest.getMainAttributes().getValue("Bundle-SymbolicName");
+            return ofNullable(value);
 
         }
-        return null;
+        return empty();
     }
 
+    public Optional<String> artifactIdFrom(JarAnalyzer jarAnalyzer, List<Model> pomEntries, Manifest manifest) {
+
+        for (final var pomEntry : pomEntries) {
+            return ofNullable(pomEntry.getArtifactId());
+        }
+
+        if (manifest != null) {
+
+            final var mainAttributes = manifest.getMainAttributes();
+            final var name = mainAttributes.getValue("Bundle-Name");
+            if (name != null) {
+                return ofNullable(name);
+            }
+        }
+
+        final var input = jarAnalyzer.getFile().getName();
+        final var matcher = Pattern.compile("([a-zA-Z-]+)(-\\S+?.jar)").matcher(input);
+        if (matcher.matches()) {
+            return ofNullable(matcher.group(1));
+        }
+
+        return empty();
+    }
 
 }

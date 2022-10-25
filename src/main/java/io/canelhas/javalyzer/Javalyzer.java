@@ -1,7 +1,7 @@
 package io.canelhas.javalyzer;
 
-import io.canelhas.javalyzer.Dependencies.JarInfo;
-import io.canelhas.javalyzer.Dependencies.JarInfo.InfoKinds;
+import io.canelhas.javalyzer.DependenciesView.JarInfo;
+import io.canelhas.javalyzer.DependenciesView.JarInfo.InfoKinds;
 import lombok.RequiredArgsConstructor;
 
 import java.nio.file.Path;
@@ -14,22 +14,23 @@ import static io.canelhas.javalyzer.utils.FileUtils.walk;
 @RequiredArgsConstructor
 public class Javalyzer {
 
-    private final Set< Path > paths;
+    private final Set<Path> paths;
 
-    public Stream< Dependencies > run( Predicate< JarInfo > chooser ) {
-        return run( chooser, new JarGatherer() );
+    public Stream<DependenciesView> run(Predicate<JarInfo> chooser) {
+        return run(chooser, new JarGatherer());
     }
 
-    public Stream< Dependencies > run( Predicate< JarInfo > chooser, Gatherer< InfoKinds >... gatherer ) {
+    public Stream<DependenciesView> run(Predicate<JarInfo> chooser, Gatherer<InfoKinds>... gatherer) {
 
-        Stream< Path > pathStream = walk( paths ).filter( f -> {
-            return f.toFile()
-                    .getName()
-                    .endsWith( ".jar" );
-        } );
+        final Stream<Path> pathStream = walk(paths).filter(f -> {
+            final var name = f.toFile().getName();
+            return name.endsWith(".jar")
+                && !name.endsWith("-sources.jar")
+                && !name.endsWith("-javadoc.jar");
+        });
 
-        Jdeps analyzer = Jdeps.of( pathStream, gatherer );
-        return analyzer.run( chooser );
+        final Jdeps analyzer = Jdeps.of(pathStream, gatherer);
+        return analyzer.run(chooser);
     }
 
 }

@@ -1,6 +1,6 @@
 package io.canelhas.javalyzer;
 
-import io.canelhas.javalyzer.Dependencies.JarInfo;
+import io.canelhas.javalyzer.DependenciesView.JarInfo;
 import org.junit.jupiter.api.Test;
 import test.JavalyzerTestData;
 
@@ -20,7 +20,7 @@ public class JavalyzerTest implements JavalyzerTestData {
 
         ToolRunner runner = args -> withStdout( "just some warnings" );
 
-        Optional< Dependencies > first = new Jdeps( runner, someClassPath() )
+        Optional<DependenciesView> first = new Jdeps( runner, someClassPath() )
                                                  .run( FOR_ALL )
                                                  .findFirst();
 
@@ -35,7 +35,7 @@ public class JavalyzerTest implements JavalyzerTestData {
 
         ToolRunner jdeps = args -> withStdout( "class -> not found" );
 
-        Optional< Dependencies > first = new Jdeps( jdeps, someClassPath() )
+        Optional<DependenciesView> first = new Jdeps( jdeps, someClassPath() )
                                                  .run( FOR_ALL )
                                                  .findFirst();
 
@@ -72,8 +72,8 @@ public class JavalyzerTest implements JavalyzerTestData {
         } );
     }
 
-    private static Optional< Map< JarInfo, Integer > > stats( Optional< Dependencies > first ) {
-        return first.map( Dependencies::getUsageCount );
+    private static Optional< Map< JarInfo, Integer > > stats( Optional<DependenciesView> first ) {
+        return first.map( DependenciesView::getUsageCount );
     }
 
 

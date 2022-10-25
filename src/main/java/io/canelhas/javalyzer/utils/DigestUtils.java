@@ -9,24 +9,22 @@ import java.security.NoSuchAlgorithmException;
 
 public class DigestUtils {
 
-    public static String sha1Code( File file ) {
+    public static String sha1Code(File file) {
         try {
-            FileInputStream   fileInputStream   = new FileInputStream( file );
-            MessageDigest     digest            = MessageDigest.getInstance( "SHA-1" );
-            DigestInputStream digestInputStream = new DigestInputStream( fileInputStream, digest );
-            byte[]            bytes             = new byte[ 1024 ];
+            final FileInputStream fileInputStream = new FileInputStream(file);
+            final MessageDigest digest = MessageDigest.getInstance("SHA-1");
+            final DigestInputStream digestInputStream = new DigestInputStream(fileInputStream, digest);
+            final byte[] bytes = new byte[1024];
             // read all file content
-            while ( digestInputStream.read( bytes ) > 0 ) ;
+            while (digestInputStream.read(bytes) > 0) ;
 
 //        digest = digestInputStream.getMessageDigest();
-            byte[] resultByteArry = digest.digest();
-            return bytesToHexString( resultByteArry );
-        }
-        catch ( NoSuchAlgorithmException e ) {
-            throw new RuntimeException( e );
-        }
-        catch ( IOException e ) {
-            throw new RuntimeException( e );
+            final byte[] resultByteArry = digest.digest();
+            return bytesToHexString(resultByteArry);
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException(e);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
         }
     }
 
@@ -37,19 +35,18 @@ public class DigestUtils {
      * @param bytes array of byte
      * @return hex String represent the array of byte
      */
-    public static String bytesToHexString( byte[] bytes ) {
-        StringBuilder sb = new StringBuilder();
-        for ( byte b : bytes ) {
-            int value = b & 0xFF;
-            if ( value < 16 ) {
+    public static String bytesToHexString(byte[] bytes) {
+        final StringBuilder sb = new StringBuilder();
+        for (final byte b : bytes) {
+            final int value = b & 0xFF;
+            if (value < 16) {
                 // if value less than 16, then it's hex String will be only
                 // one character, so we need to append a character of '0'
-                sb.append( "0" );
+                sb.append("0");
             }
-            sb.append( Integer.toHexString( value ).toUpperCase() );
+            sb.append(Integer.toHexString(value).toUpperCase());
         }
         return sb.toString();
     }
-
 
 }
