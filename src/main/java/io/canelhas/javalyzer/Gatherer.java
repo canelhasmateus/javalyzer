@@ -11,8 +11,9 @@ import static java.util.Collections.unmodifiableMap;
 
 public interface Gatherer<T extends Enum<T>> {
 
+    // TODO: 26/10/22 Make this better. And type safe.
     @SafeVarargs
-    static <T extends Enum<T>> UnaryOperator<GatheredInfo<T>> enrichWith(Gatherer<T>... gatherers) {
+    static <T extends Enum<T>> UnaryOperator<GatheredInfo<T>> enrichWithAll(Gatherer<T>... gatherers) {
         return currentInfo -> {
             for (final Gatherer<T> gatherer : gatherers) {
                 final GatheredInfo<T> newInfo = gatherer.resolve(currentInfo);

@@ -2,6 +2,8 @@ package io.canelhas.javalyzer;
 
 import io.canelhas.javalyzer.DependenciesView.JarInfo;
 import io.canelhas.javalyzer.DependenciesView.JarInfo.InfoKinds;
+import io.canelhas.javalyzer.DependenciesView.JarSummary;
+import io.canelhas.javalyzer.Gatherer.GatheredInfo;
 import io.canelhas.javalyzer.ToolRunner.ParseInfo;
 import io.canelhas.javalyzer.ToolRunner.ParseInfo.Full;
 import io.canelhas.javalyzer.ToolRunner.ParseInfo.NotFound;
@@ -9,6 +11,8 @@ import io.canelhas.javalyzer.ToolRunner.ParseInfo.PackageOnly;
 import io.canelhas.javalyzer.ToolRunner.ParseInfo.ToolWarning;
 import io.canelhas.javalyzer.ToolRunner.ParseInfo.Unknown;
 import io.canelhas.javalyzer.ToolRunner.ShellOutput;
+import org.apache.maven.model.Dependency;
+import org.apache.maven.model.Model;
 import org.apache.maven.model.ModelBase;
 
 import java.io.PrintWriter;
@@ -20,19 +24,21 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.jar.Manifest;
 import java.util.stream.Stream;
 
 import static io.canelhas.javalyzer.DependenciesView.JarInfo.InfoKinds.withLocationInfo;
-import static io.canelhas.javalyzer.DependenciesView.JarInfo.artifactOf;
-import static io.canelhas.javalyzer.DependenciesView.JarInfo.createFrom;
-import static io.canelhas.javalyzer.DependenciesView.JarInfo.fileNameOf;
-import static io.canelhas.javalyzer.DependenciesView.JarInfo.fullPathOf;
-import static io.canelhas.javalyzer.DependenciesView.increaseCount;
-import static io.canelhas.javalyzer.Gatherer.enrichWith;
-import static io.canelhas.javalyzer.utils.FunctionalUtils.lookupWith;
+import static io.canelhas.javalyzer.Gatherer.enrichWithAll;
+import static io.canelhas.javalyzer.utils.FunctionalUtils.lookupWithAll;
 import static java.lang.System.arraycopy;
+import static java.util.Optional.ofNullable;
 import static java.util.spi.ToolProvider.findFirst;
+import static java.util.stream.Collectors.groupingBy;
 import static java.util.stream.Collectors.joining;
 import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toSet;
@@ -42,15 +48,16 @@ public class Jdeps {
     private final ToolRunner jdeps;
     private final String[] args;
     private final Collection<JarInfo> classPath;
-    private final Map<String, JarInfo> lookup;
+    private final Map<String, JarSummary> lookup;
+    private final Map<Integer, JarSummary> summaryLookup;
 
     public Jdeps(ToolRunner jdeps, Collection<JarInfo> jars) {
 
         this.classPath = jars;
         this.jdeps = jdeps;
 
-        this.lookup = lookupWith(jars, fileNameOf());
-        this.lookup.putAll(lookupWith(jars, artifactOf()));
+        this.lookup = lookupWithAll(jars, JarInfo::summary, jarName(), artifactOf());
+        this.summaryLookup = lookupWithAll(jars, JarInfo::summary, summaryHash());
 
         // TODO: 24/10/2022 parametrize?
         final List<String> args = new ArrayList<>();
@@ -61,7 +68,7 @@ public class Jdeps {
 
         args.add("--class-path");
         args.add(jars.stream()
-            .map(fullPathOf())
+            .map(jarPath())
             .distinct()
             .collect(joining(";")));
 
@@ -71,10 +78,16 @@ public class Jdeps {
 
     public static Jdeps of(Stream<Path> paths, Gatherer<InfoKinds>... gatherers) {
 
-        final var classPath = paths.distinct()
+        // TODO: 26/10/22 Generalize this, as well as infoGathering, by using an SearchIndex.
+        final var collect = paths.distinct()
+            .collect(groupingBy(lastName()));
+
+        final var classPath = collect.values()
+            .stream()
             .map(withLocationInfo())
-            .map(enrichWith(gatherers))
-            .map(createFrom())
+            .map(enrichWithAll(gatherers))
+            .map(createInfo())
+            .filter(hasJar())
             .collect(toList());
 
         final var runner = (ToolRunner) (arg) -> {
@@ -93,6 +106,35 @@ public class Jdeps {
         return new Jdeps(runner, classPath);
     }
 
+    private static Predicate<? super JarInfo> hasJar() {
+        return j -> {
+            final var exists = j.jarFile() != null;
+            if (!exists) {
+                System.out.println("No jar found for = " + j);
+            }
+            return exists;
+        };
+    }
+
+    private static Function<Path, String> lastName() {
+        return p -> {
+            var s = p.getFileName().toString();
+
+            final var extensionIdx = s.lastIndexOf(".");
+            s = s.substring(0, extensionIdx);
+
+//            final var resourceIdx = s.lastIndexOf("-") + 1;
+            return s;
+        };
+    }
+
+    static Consumer<JarSummary> increaseCount(HashMap<JarSummary, Integer> frequencies) {
+        return key -> {
+            final Integer count = frequencies.getOrDefault(key, 0);
+            frequencies.put(key, count + 1);
+        };
+    }
+
     public Stream<DependenciesView> run(Predicate<JarInfo> filter) {
         return this.classPath.stream().filter(filter).map(jar -> {
 
@@ -100,7 +142,7 @@ public class Jdeps {
             {
                 final var copiedArgs = new String[args.length + 1];
                 arraycopy(args, 0, copiedArgs, 0, args.length);
-                copiedArgs[copiedArgs.length - 1] = fullPathOf().apply(jar);
+                copiedArgs[copiedArgs.length - 1] = jarPath().apply(jar);
 
                 try {
                     shellOutput = jdeps.run(copiedArgs);
@@ -109,7 +151,7 @@ public class Jdeps {
                 }
             }
 
-            final var frequencies = new HashMap<JarInfo, Integer>();
+            final var frequencies = new HashMap<JarSummary, Integer>();
             final var increase = increaseCount(frequencies);
             shellOutput.stdout().map(this::parseLine).forEach(info -> {
 
@@ -129,16 +171,99 @@ public class Jdeps {
                 .stream()
                 .map(ModelBase::getDependencies)
                 .flatMap(Collection::stream)
+                .map(createSummary())
+                .filter(Objects::nonNull)
                 .collect(toSet());
+
+            if (dependencies.isEmpty()) {
+                System.out.println("dependencies is empty= " + dependencies);
+            }
 
             return DependenciesView.builder()
                 .usageCount(frequencies)
                 // todo produce dependencies from jar pom. the current implementation wont ever show unused dependencies.
                 .dependencies(dependencies)
-                .jar(jar)
+                .jar(jar.summary())
                 .build();
 
         });
+    }
+
+    public static Function<JarInfo, String> jarPath() {
+        return info -> info.jarFile().toAbsolutePath().toString();
+    }
+
+    public static Function<JarInfo, String> jarName() {
+        return info -> info.jarFile().getFileName().toString();
+    }
+
+    public static Function<JarInfo, String> artifactOf() {
+        return info -> info.relatedPoms().stream()
+            .map(Model::getArtifactId)
+            .findFirst()
+            .orElse(null);
+    }
+
+    private Function<Dependency, JarSummary> createSummary() {
+        return d -> {
+
+            final var hash = tripleHash(d);
+            final var res = summaryLookup.get(hash);
+            return res != null
+                   ? res
+                   : new JarSummary(
+                       ofNullable(d.getArtifactId()),
+                       ofNullable(d.getGroupId()),
+                       ofNullable(d.getVersion()));
+
+        };
+    }
+
+    private int tripleHash(Dependency d) {
+        return tripleHash(d.getArtifactId(), d.getGroupId(), d.getVersion());
+    }
+
+    public static Function<JarInfo, Integer> summaryHash() {
+        return info -> {
+            final var summary = info.summary();
+
+            final var s3 = summary.artifactId();
+            final var s4 = summary.groupId();
+            final var version = summary.version();
+            return tripleHash(s3, s4, version);
+        };
+    }
+
+    private static int tripleHash(Optional<String> s3, Optional<String> s4, Optional<String> version) {
+        final var s = s3.orElse(null);
+        final var s1 = s4.orElse(null);
+        final var s2 = version.orElse(null);
+        return tripleHash(s, s1, s2);
+    }
+
+    private static int tripleHash(String s, String s1, String s2) {
+        return Objects.hash(s, s1, s2);
+    }
+
+    public static Function<GatheredInfo<InfoKinds>, JarInfo> createInfo() {
+
+        return info -> {
+
+            final JarSummary jarSummary;
+            {
+                final var version = (String) info.get(InfoKinds.VERSION).value();
+                final var artifact = (String) info.get(InfoKinds.ARTIFACT).value();
+                final var group = (String) info.get(InfoKinds.GROUP).value();
+                jarSummary = new JarSummary(ofNullable(artifact), ofNullable(group), ofNullable(version));
+            }
+
+            final var location = (Path) info.get(InfoKinds.JARFILE).value();
+            final var related = (List<Path>) info.get(InfoKinds.LOCATIONS).value();
+            final var pom = (List<Model>) info.get(InfoKinds.POM).value();
+            final var manifest = (Manifest) info.get(InfoKinds.MANIFEST).value();
+
+            return new JarInfo(location, pom, ofNullable(manifest), jarSummary, related);
+        };
     }
 
     private ParseInfo parseLine(String line) {

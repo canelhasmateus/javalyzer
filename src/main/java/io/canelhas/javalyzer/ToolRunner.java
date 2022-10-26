@@ -1,6 +1,6 @@
 package io.canelhas.javalyzer;
 
-import io.canelhas.javalyzer.DependenciesView.JarInfo;
+import io.canelhas.javalyzer.DependenciesView.JarSummary;
 
 import java.util.stream.Stream;
 
@@ -28,9 +28,9 @@ public interface ToolRunner {
             public final String origin;
             public final String destPackage;
             public final String destClass;
-            public final JarInfo info;
+            public final JarSummary info;
 
-            Unknown(String origin, String destPackage, String destClass, JarInfo info ) {
+            Unknown(String origin, String destPackage, String destClass, JarSummary info) {
                 this.origin = origin;
                 this.destPackage = destPackage;
                 this.destClass = destClass;
@@ -55,9 +55,9 @@ public interface ToolRunner {
 
             public final String originClass;
             public final String packageName;
-            public final JarInfo foundLookup;
+            public final JarSummary foundLookup;
 
-            PackageOnly(String originClass, String packageName, JarInfo foundLookup) {
+            PackageOnly(String originClass, String packageName, JarSummary foundLookup) {
                 this.originClass = originClass;
                 this.packageName = packageName;
                 this.foundLookup = foundLookup;
@@ -69,9 +69,9 @@ public interface ToolRunner {
             public final String originClass;
             public final String className;
             public final String packageName;
-            public final JarInfo foundLookup;
+            public final JarSummary foundLookup;
 
-            Full(String originClass, String packageName, String className, JarInfo foundLookup) {
+            Full(String originClass, String packageName, String className, JarSummary foundLookup) {
                 this.originClass = originClass;
                 this.className = className;
                 this.packageName = packageName;

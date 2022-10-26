@@ -22,12 +22,17 @@ public class Javalyzer {
 
     public Stream<DependenciesView> run(Predicate<JarInfo> chooser, Gatherer<InfoKinds>... gatherer) {
 
-        final Stream<Path> pathStream = walk(paths).filter(f -> {
-            final var name = f.toFile().getName();
-            return name.endsWith(".jar")
-                && !name.endsWith("-sources.jar")
-                && !name.endsWith("-javadoc.jar");
-        });
+        final Stream<Path> pathStream = walk(paths)
+            .filter(f -> f.toFile().isFile())
+            .filter(f -> {
+                final var name = f.toFile().getName();
+                return name.endsWith(".pom") || (
+                    name.endsWith(".jar")
+                        && !name.endsWith("-sources.jar")
+                        && !name.endsWith("-javadoc.jar")
+                        && !name.endsWith("-test-fixtures.jar")
+                        && !name.endsWith("-test.jar"));
+            });
 
         final Jdeps analyzer = Jdeps.of(pathStream, gatherer);
         return analyzer.run(chooser);

@@ -1,6 +1,7 @@
 package io.canelhas.javalyzer;
 
 import io.canelhas.javalyzer.DependenciesView.JarInfo;
+import io.canelhas.javalyzer.DependenciesView.JarSummary;
 import org.junit.jupiter.api.Test;
 import test.JavalyzerTestData;
 
@@ -72,7 +73,7 @@ public class JavalyzerTest implements JavalyzerTestData {
         } );
     }
 
-    private static Optional< Map< JarInfo, Integer > > stats( Optional<DependenciesView> first ) {
+    private static Optional< Map<JarSummary, Integer > > stats(Optional<DependenciesView> first ) {
         return first.map( DependenciesView::getUsageCount );
     }
 
